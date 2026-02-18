@@ -103,6 +103,10 @@ func (u *itemUsecase) UpdateItem(ctx context.Context, id int64, input UpdateItem
 		return nil, err
 	}
 
+	if len(item.PurchaseDate) > 10 {
+		item.PurchaseDate = item.PurchaseDate[:10]
+	}
+
 	if input.Name != nil {
 		item.Name = *input.Name
 	}
