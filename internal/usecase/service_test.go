@@ -38,6 +38,11 @@ func (m *MockItemRepository) Create(ctx context.Context, item *entity.Item) (*en
 	return args.Get(0).(*entity.Item), args.Error(1)
 }
 
+func (m *MockItemRepository) Update(ctx context.Context, item *entity.Item) error {
+	args := m.Called(ctx, item)
+	return args.Error(0)
+}
+
 func (m *MockItemRepository) Delete(ctx context.Context, id int64) error {
 	args := m.Called(ctx, id)
 	return args.Error(0)
@@ -289,6 +294,89 @@ func TestItemUsecase_CreateItem(t *testing.T) {
 		})
 	}
 }
+
+func TestItemUsecase_UpdateItem(t *testing.T) {
+	tests := []struct {
+		name        string
+		id          int64
+		input       UpdateItemInput
+		setupMock   func(*MockItemRepository)
+		expectError bool
+		expectedErr error
+	}{
+		{
+			name: "正常系: 名前と価格を更新",
+			id:   1,
+			input: UpdateItemInput{
+				Name:          stringPtr("ロレックス デイトナ改"),
+				PurchasePrice: intPtr(1600000),
+			},
+			setupMock: func(mockRepo *MockItemRepository) {
+
+				item, _ := entity.NewItem("ロレックス デイトナ", "時計", "ROLEX", 1500000, "2023-01-15")
+				item.ID = 1
+				mockRepo.On("FindByID", mock.Anything, int64(1)).Return(item, nil)
+				mockRepo.On("Update", mock.Anything, mock.AnythingOfType("*entity.Item")).Return(nil)
+			},
+			expectError: false,
+		},
+		{
+			name: "異常系: 存在しないアイテム",
+			id:   999,
+			input: UpdateItemInput{
+				Name: stringPtr("新しい名前"),
+			},
+			setupMock: func(mockRepo *MockItemRepository) {
+				mockRepo.On("FindByID", mock.Anything, int64(999)).Return((*entity.Item)(nil), domainErrors.ErrItemNotFound)
+			},
+			expectError: true,
+			expectedErr: domainErrors.ErrItemNotFound,
+		},
+		{
+			name: "異常系: 無効なID（0以下）",
+			id:   0,
+			input: UpdateItemInput{
+				Name: stringPtr("新しい名前"),
+			},
+			setupMock: func(mockRepo *MockItemRepository) {
+
+			},
+			expectError: true,
+			expectedErr: domainErrors.ErrInvalidInput,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockItemRepository)
+			tt.setupMock(mockRepo)
+			usecase := NewItemUsecase(mockRepo)
+
+			ctx := context.Background()
+			item, err := usecase.UpdateItem(ctx, tt.id, tt.input)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.expectedErr != nil {
+					assert.ErrorIs(t, err, tt.expectedErr)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, item)
+				if tt.input.Name != nil {
+					assert.Equal(t, *tt.input.Name, item.Name)
+				}
+				if tt.input.PurchasePrice != nil {
+					assert.Equal(t, *tt.input.PurchasePrice, item.PurchasePrice)
+				}
+			}
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+func stringPtr(s string) *string { return &s }
+func intPtr(i int) *int          { return &i }
 
 func TestItemUsecase_DeleteItem(t *testing.T) {
 	tests := []struct {
